@@ -329,27 +329,39 @@ function App() {
           }`}
         >
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p
-                className={`text-xs font-semibold uppercase tracking-[0.22em] sm:text-sm ${
-                  isDarkTheme ? 'text-sky-300' : 'text-sky-600'
-                }`}
-              >
-                Farewell Gift Pool
+            <div className="brand-block">
+              <div className="mb-4 flex items-center gap-3">
+                <span className={`brand-mark ${isDarkTheme ? 'brand-mark-dark' : 'brand-mark-light'}`}>
+                  GP
+                </span>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.22em] sm:text-sm ${
+                    isDarkTheme ? 'text-sky-300' : 'text-sky-600'
+                  }`}
+                >
+                  Shared contribution organizer
+                </p>
+              </div>
+              <p className={`brand-kicker ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
+                One pool. Clear numbers. Fair finish.
               </p>
               <h1
-                className={`mt-2 text-2xl font-bold tracking-tight sm:text-4xl ${
+                className={`brand-title mt-1 tracking-tight ${
                   isDarkTheme ? 'text-white' : 'text-slate-900'
                 }`}
               >
-                Fair split & settlement tracker
+                Gift<span>-</span>Pool
               </h1>
+              <p className={`mt-3 max-w-xl text-sm sm:text-base ${isDarkTheme ? 'text-slate-300' : 'text-slate-600'}`}>
+                Track contributions, clean messy imports, and settle every share fairly.
+              </p>
             </div>
-            <div className="app-actions flex items-center gap-3">
+            <div className={`app-actions flex items-center gap-3 ${isDarkTheme ? 'actions-dark' : 'actions-light'}`}>
               <button
                 type="button"
                 onClick={() => setTheme(isDarkTheme ? 'light' : 'dark')}
-                className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                aria-label={`Switch to ${isDarkTheme ? 'light' : 'dark'} mode`}
+                className={`app-control theme-control rounded-full border px-4 py-2 text-sm font-semibold transition ${
                   isDarkTheme
                     ? 'border-sky-400/60 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20'
                     : 'border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200'
@@ -360,7 +372,8 @@ function App() {
               <button
                 type="button"
                 onClick={handleResetPool}
-                className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                aria-label="Reset pool data"
+                className={`app-control reset-control rounded-full border px-4 py-2 text-sm font-semibold transition ${
                   isDarkTheme
                     ? 'border-rose-400/50 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20'
                     : 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
