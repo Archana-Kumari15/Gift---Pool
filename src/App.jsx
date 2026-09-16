@@ -380,7 +380,9 @@ function App() {
                 : 'border-emerald-300 bg-emerald-50'
             }`}
           >
-            <p className="text-xs uppercase tracking-[0.2em] text-emerald-200">Budget</p>
+            <p className={`text-xs uppercase tracking-[0.2em] ${isDarkTheme ? 'text-emerald-200' : 'text-emerald-700'}`}>
+              Budget
+            </p>
             <p className={`mt-3 text-2xl font-bold sm:text-3xl ${isDarkTheme ? 'text-white' : 'text-emerald-700'}`}>
               {formatMoney(budget)}
             </p>
@@ -392,7 +394,9 @@ function App() {
                 : 'border-violet-300 bg-violet-50'
             }`}
           >
-            <p className="text-xs uppercase tracking-[0.2em] text-violet-200">Share</p>
+            <p className={`text-xs uppercase tracking-[0.2em] ${isDarkTheme ? 'text-violet-200' : 'text-violet-700'}`}>
+              Share
+            </p>
             <p className={`mt-3 text-2xl font-bold sm:text-3xl ${isDarkTheme ? 'text-white' : 'text-violet-700'}`}>
               {formatMoney(share)}
             </p>
@@ -404,7 +408,9 @@ function App() {
                 : 'border-amber-300 bg-amber-50'
             }`}
           >
-            <p className="text-xs uppercase tracking-[0.2em] text-amber-200">Collected</p>
+            <p className={`text-xs uppercase tracking-[0.2em] ${isDarkTheme ? 'text-amber-200' : 'text-amber-700'}`}>
+              Collected
+            </p>
             <p className={`mt-3 text-2xl font-bold sm:text-3xl ${isDarkTheme ? 'text-white' : 'text-amber-700'}`}>
               {formatMoney(totalCollected)}
             </p>
@@ -416,7 +422,9 @@ function App() {
                 : 'border-rose-300 bg-rose-50'
             }`}
           >
-            <p className="text-xs uppercase tracking-[0.2em] text-rose-200">Still needed</p>
+            <p className={`text-xs uppercase tracking-[0.2em] ${isDarkTheme ? 'text-rose-200' : 'text-rose-700'}`}>
+              Still needed
+            </p>
             <p className={`mt-3 text-2xl font-bold sm:text-3xl ${isDarkTheme ? 'text-white' : 'text-rose-700'}`}>
               {formatMoney(stillNeeded)}
             </p>
@@ -430,7 +438,17 @@ function App() {
               : 'border-slate-200 bg-white text-slate-700 shadow-slate-200/70'
           }`}
         >
-          <span className={stillNeeded === 0 ? 'text-emerald-300' : 'text-amber-300'}>
+          <span
+            className={
+              stillNeeded === 0
+                ? isDarkTheme
+                  ? 'text-emerald-300'
+                  : 'text-emerald-700'
+                : isDarkTheme
+                  ? 'text-amber-300'
+                  : 'text-amber-700'
+            }
+          >
             {statusText}
           </span>
         </div>
@@ -571,6 +589,9 @@ function App() {
 
             <label className={`block text-sm ${isDarkTheme ? 'text-slate-300' : 'text-slate-600'}`}>
               Past contributions
+              <span className="mt-1 block text-xs text-slate-400">
+                Paste one contribution per line. Names, separators, currency symbols, and commas can vary.
+              </span>
               <textarea
                 rows="10"
                 value={importText}
@@ -580,8 +601,10 @@ function App() {
                     ? 'border-slate-600 bg-slate-950 text-white focus:border-sky-400'
                     : 'border-slate-300 bg-slate-50 text-slate-900 focus:border-sky-500'
                 }`}
-                placeholder="Asha: 900
+                placeholder="Asha: ₹900
+asha / 90
 Ravi, 750
+Meera | 600
 bad row"
               />
             </label>
@@ -612,7 +635,7 @@ bad row"
               Import report
             </h2>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2" aria-live="polite">
               <div
                 className={`rounded-2xl border p-3 ${
                   isDarkTheme ? 'border-slate-700 bg-slate-950' : 'border-slate-200 bg-slate-50'
@@ -692,7 +715,9 @@ bad row"
                           </span>
                         )}
                       </span>
-                      <span className="font-semibold text-emerald-300">{formatMoney(entry.amount)}</span>
+                      <span className={`font-semibold ${isDarkTheme ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                        {formatMoney(entry.amount)}
+                      </span>
                     </li>
                   ))
                 ) : (
@@ -711,8 +736,10 @@ bad row"
                     : 'border-rose-200 bg-rose-50'
                 }`}
               >
-                <p className="text-sm font-medium text-rose-100">Rejected rows</p>
-                <ul className="mt-3 space-y-2 text-sm text-rose-200">
+                <p className={`text-sm font-medium ${isDarkTheme ? 'text-rose-100' : 'text-rose-700'}`}>
+                  Rejected rows
+                </p>
+                <ul className={`mt-3 space-y-2 text-sm ${isDarkTheme ? 'text-rose-200' : 'text-rose-700'}`}>
                   {summary.rejected.map((item, index) => (
                     <li
                       key={`${item.row}-${index}`}
@@ -762,9 +789,13 @@ bad row"
                       <td
                         className={`py-3 pr-4 font-semibold ${
                           person.balance > 0
-                            ? 'text-emerald-300'
+                            ? isDarkTheme
+                              ? 'text-emerald-300'
+                              : 'text-emerald-700'
                             : person.balance < 0
-                              ? 'text-rose-300'
+                              ? isDarkTheme
+                                ? 'text-rose-300'
+                                : 'text-rose-700'
                               : 'text-slate-300'
                         }`}
                       >
@@ -800,7 +831,9 @@ bad row"
                   ))}
                 </ul>
               ) : (
-                <p className="mt-3 text-sm text-emerald-300">Everyone is settled. No transfers are needed.</p>
+                <p className={`mt-3 text-sm ${isDarkTheme ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                  Everyone is settled. No transfers are needed.
+                </p>
               )}
             </div>
           </div>
