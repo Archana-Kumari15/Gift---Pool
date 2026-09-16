@@ -1,13 +1,17 @@
 # Reasoning
 
-This task required creating a GitHub repository submission that satisfies a strict evaluation checklist rather than implementing an application feature set. The main requirement was to ensure the repository is public and the root folder contains the required files:
+This project was designed around the organiser's actual pain points: the constant question of “how much do I still owe?”, “have we collected enough?”, and “who pays whom at the end?”
 
-- README.md
-- REASONING.md
-- AI_LOGS.md
+The solution starts with a simple fairness model: everyone contributes equally to the total budget, so each person has a target share. The app then compares each contributor’s current total against that share to derive a per-person balance. A positive balance means they have overpaid and are entitled to be reimbursed; a negative balance means they still owe money.
 
-The core reasoning was to verify the repository state first. The workspace already had a valid Git repository and a GitHub remote pointing to a public repository. I confirmed the repository visibility and default branch using GitHub CLI. After that, I updated the README so it clearly explains setup, running, and debugging guidance for the submission.
+The second layer is settlement logic. Instead of asking the organiser to manually calculate transfers, the app reduces the balances to the smallest number of transactions. It matches debtors to creditors and produces the simplest payment chain so everyone ends at zero.
 
-The key principle here is that the evaluation focuses on repository compliance and required artifacts. Since there was no source code or build process to implement, the required solution is to provide the mandated documentation and ensure the repository remains public and accessible.
+The twist was the messy import requirement. Real contribution records are rarely clean: names can repeat with case differences, the same person may appear multiple times, amounts may be written with rupee symbols or commas, and some rows are invalid. The app therefore includes a cleaning pass that:
 
-This is why the repository is intentionally minimal and compliant with the explicit instructions.
+- normalises names to a common format,
+- merges duplicate contributions from the same person,
+- parses inconsistent amount formats,
+- rejects rows that are clearly invalid,
+- reports what was imported, de-duplicated, merged, and rejected.
+
+This makes the tool useful for real-world organiser workflows, not just a one-off gift calculation.

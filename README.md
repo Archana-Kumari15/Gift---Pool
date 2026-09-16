@@ -1,42 +1,58 @@
-# Gift---Pool Submission
+# Gift---Pool
 
-This repository is the required public GitHub submission for the evaluation. The root folder includes the mandatory files requested by the prompt:
+A React + Vite frontend for tracking a farewell gift pool and settling balances fairly.
 
-- README.md
-- REASONING.md
-- AI_LOGS.md
+## Features
 
-## Project status
+- set a total gift budget
+- enter any number of contributors and their payments
+- calculate equal share per person
+- show each person's balance and how much is still owed/overpaid
+- detect the easiest fair settlement plan
+- import messy contribution data with duplicates, formatting issues, and invalid rows
+- clean and merge imported entries before calculating balances
 
-This workspace does not contain an application implementation to build or run. The objective here is to satisfy the repository submission requirements exactly and to keep the project public and accessible on GitHub.
+## Tech stack
 
-## Setup
+- React.js
+- JavaScript
+- Tailwind CSS
+- Vite
 
-1. Clone the repository:
+## Getting started
+
+1. Install dependencies:
    ```bash
-   git clone https://github.com/Archana-Kumari15/Gift---Pool.git
-   cd Gift---Pool
+   npm install
    ```
-2. Confirm the repository is public on GitHub:
+2. Run the app locally:
    ```bash
-   gh repo view --json nameWithOwner,visibility,isPrivate --jq '{nameWithOwner: .nameWithOwner, visibility: .visibility, private: .isPrivate}'
+   npm run dev
+   ```
+3. Open the local URL shown in the terminal, typically:
+   ```bash
+   http://localhost:5173/
    ```
 
-## Running
+## Production build
 
-There is no application code in this repository, so there is no runtime command to execute. The deliverable is the required documentation and the public repository itself.
+```bash
+npm run build
+```
+
+To preview the production build locally:
+
+```bash
+npm run preview
+```
 
 ## Debugging
 
-If something appears incorrect:
+- If the UI looks wrong, restart the dev server with `npm run dev`.
+- If the pool totals seem off, check the names and payment values entered in the Team members and Messy import boxes.
+- If imported rows are being rejected, confirm the row includes a valid name and a numeric amount.
+- If needed, refresh the page to reset the in-memory demo state.
 
-- verify the GitHub remote is set correctly with `git remote -v`
-- confirm the repository is public and accessible in the GitHub UI
-- ensure the root directory contains the required three files exactly as requested
+## Notes
 
-## Submission checklist
-
-- public GitHub repository: yes
-- README.md present: yes
-- REASONING.md present: yes
-- AI_LOGS.md present: yes
+This project is designed for organisers handling shared contribution pools where people may have paid different amounts, some may have paid extra, and a final settlement list is needed to make everyone end up square.
