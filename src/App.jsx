@@ -1,31 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const demoMembers = [
-  { id: 1, name: 'Asha', paid: 900 },
-  { id: 2, name: 'Ravi', paid: 750 },
-  { id: 3, name: 'Meera', paid: 600 },
-  { id: 4, name: 'Ishaan', paid: 750 },
-  { id: 5, name: 'Neha', paid: 1000 },
-  { id: 6, name: 'Karan', paid: 825 },
-  { id: 7, name: 'Pooja', paid: 750 },
-  { id: 8, name: 'Sahil', paid: 425 },
-]
-
-const demoImport = `Asha: ₹900
-Ravi, 750
-Meera | 600
-Ishaan 750
-Neha: 1,000
-Karan, 825
-Pooja 750
-Sahil, ₹425
-Asha / 90
-Asha 60
-Mina - 1200
-bad row
-`
-
 const currencyFormatter = new Intl.NumberFormat('en-IN', {
   style: 'currency',
   currency: 'INR',
@@ -34,6 +9,17 @@ const currencyFormatter = new Intl.NumberFormat('en-IN', {
 })
 
 const formatMoney = (value) => currencyFormatter.format(Number(value || 0))
+
+const emptyImportSummary = {
+  cleanedEntries: [],
+  cleanedMap: {},
+  byName: {},
+  imported: 0,
+  accepted: 0,
+  rejected: [],
+  uniqueCount: 0,
+  mergedCount: 0,
+}
 
 const normalizeName = (value) =>
   String(value || '')
@@ -58,11 +44,12 @@ const parseContributionLine = (originalLine) => {
   const amountText = matches[matches.length - 1][0]
   const amount = parseAmount(amountText)
   if (amount === null) return { valid: false, reason: 'Invalid amount' }
+  if (amount < 0) return { valid: false, reason: 'Amount cannot be negative' }
 
   const beforeAmount = line.slice(0, line.indexOf(amountText)).replace(/[|:/;,\\-]+/g, ' ')
   const name = beforeAmount.replace(/[₹$€£]+/g, '').replace(/\s+/g, ' ').trim()
 
-  if (!name) return { valid: false, reason: 'Missing payer name' }
+  if (!name || !normalizeName(name)) return { valid: false, reason: 'Missing payer name' }
 
   return {
     valid: true,
@@ -127,9 +114,10 @@ const buildImportSummary = (rawText) => {
     cleanedMap,
     byName,
     imported: entries.length,
+    accepted: entries.length - rejected.length,
     rejected,
     uniqueCount: cleanedEntries.length,
-    mergedCount: entries.length - cleanedEntries.length,
+    mergedCount: entries.length - rejected.length - cleanedEntries.length,
   }
 }
 
@@ -178,36 +166,57 @@ const computeSettlements = (balances) => {
 
 const STORAGE_KEY = 'gift-pool-data'
 
-function App() {
-  const [budget, setBudget] = useState(6000)
-  const [members, setMembers] = useState(demoMembers)
-  const [importText, setImportText] = useState(demoImport)
-  const [summary, setSummary] = useState(() => buildImportSummary(demoImport))
+const getInitialPoolState = () => {
+  const fallback = {
+    theme: 'dark',
+    budget: 0,
+    members: [],
+    importText: '',
+    summary: emptyImportSummary,
+  }
 
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (!saved) return
+  if (typeof window === 'undefined') return fallback
 
-    try {
-      const parsed = JSON.parse(saved)
-      if (parsed.budget) setBudget(parsed.budget)
-      if (parsed.members?.length) setMembers(parsed.members)
-      if (parsed.importText) setImportText(parsed.importText)
-      if (parsed.summary) setSummary(parsed.summary)
-    } catch {
-      localStorage.removeItem(STORAGE_KEY)
+  const saved = localStorage.getItem(STORAGE_KEY)
+  if (!saved) return fallback
+
+  try {
+    const parsed = JSON.parse(saved)
+    return {
+      theme: parsed.theme === 'light' ? 'light' : 'dark',
+      budget: Object.hasOwn(parsed, 'budget') ? Number(parsed.budget) || 0 : 0,
+      members: Array.isArray(parsed.members) ? parsed.members : [],
+      importText: typeof parsed.importText === 'string' ? parsed.importText : '',
+      summary: parsed.summary?.cleanedEntries ? parsed.summary : emptyImportSummary,
     }
-  }, [])
+  } catch {
+    localStorage.removeItem(STORAGE_KEY)
+    return fallback
+  }
+}
+
+function App() {
+  const [initialPool] = useState(getInitialPoolState)
+  const [theme, setTheme] = useState(initialPool.theme)
+  const [budget, setBudget] = useState(initialPool.budget)
+  const [members, setMembers] = useState(initialPool.members)
+  const [newMemberId, setNewMemberId] = useState(null)
+  const [importText, setImportText] = useState(initialPool.importText)
+  const [summary, setSummary] = useState(initialPool.summary)
+
+  const isDarkTheme = theme === 'dark'
 
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ budget, members, importText, summary }),
+      JSON.stringify({ budget, members, importText, summary, theme }),
     )
-  }, [budget, members, importText, summary])
+  }, [budget, members, importText, summary, theme])
 
   const handleAddMember = () => {
-    setMembers((current) => [...current, { id: Date.now(), name: '', paid: 0 }])
+    const id = Date.now()
+    setMembers((current) => [...current, { id, name: '', paid: 0 }])
+    setNewMemberId(id)
   }
 
   const handleMemberChange = (id, field, value) => {
@@ -216,7 +225,10 @@ function App() {
         member.id === id
           ? {
               ...member,
-              [field]: field === 'paid' ? Number(value || 0) : value,
+                    [field]:
+                      field === 'paid'
+                        ? Math.max(0, Number(value || 0))
+                        : value,
             }
           : member,
       ),
@@ -225,13 +237,17 @@ function App() {
 
   const handleRemoveMember = (id) => {
     setMembers((current) => current.filter((member) => member.id !== id))
+    setNewMemberId((current) => (current === id ? null : current))
   }
 
-  const handleLoadDemo = () => {
-    setBudget(6000)
-    setMembers(demoMembers)
-    setImportText(demoImport)
-    setSummary(buildImportSummary(demoImport))
+  const handleResetPool = () => {
+    if (!window.confirm('Clear this pool and all saved contribution data?')) return
+
+    setBudget(0)
+    setMembers([])
+    setNewMemberId(null)
+    setImportText('')
+    setSummary(emptyImportSummary)
   }
 
   const handleImport = () => {
@@ -292,138 +308,278 @@ function App() {
   )
 
   const statusText =
-    stillNeeded === 0
+    !people.length
+      ? 'Add members and set a budget to start tracking this pool.'
+      : stillNeeded === 0
       ? 'The pool is fully funded.'
       : `We still need ${formatMoney(stillNeeded)} to hit the target.`
 
   return (
-    <main className="min-h-screen px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
+    <main
+      className={`app-shell min-h-screen px-4 py-6 transition-colors duration-300 sm:px-6 lg:px-8 ${
+        isDarkTheme ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-800'
+      }`}
+    >
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="rounded-3xl border border-sky-500/30 bg-slate-900/80 p-5 shadow-2xl shadow-sky-950/40 backdrop-blur-sm sm:p-6">
+        <header
+          className={`rounded-3xl border p-5 shadow-2xl backdrop-blur-sm sm:p-6 ${
+            isDarkTheme
+              ? 'border-sky-500/30 bg-slate-900/80 shadow-sky-950/40'
+              : 'border-sky-300 bg-white/90 shadow-sky-200/80'
+          }`}
+        >
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-300 sm:text-sm">
+              <p
+                className={`text-xs font-semibold uppercase tracking-[0.22em] sm:text-sm ${
+                  isDarkTheme ? 'text-sky-300' : 'text-sky-600'
+                }`}
+              >
                 Farewell Gift Pool
               </p>
-              <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-4xl">
+              <h1
+                className={`mt-2 text-2xl font-bold tracking-tight sm:text-4xl ${
+                  isDarkTheme ? 'text-white' : 'text-slate-900'
+                }`}
+              >
                 Fair split & settlement tracker
               </h1>
             </div>
-            <button
-              type="button"
-              onClick={handleLoadDemo}
-              className="rounded-full border border-sky-400/60 bg-sky-500/10 px-4 py-2 text-sm font-semibold text-sky-100 transition hover:bg-sky-500/20"
-            >
-              Load demo data
-            </button>
+            <div className="app-actions flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setTheme(isDarkTheme ? 'light' : 'dark')}
+                className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                  isDarkTheme
+                    ? 'border-sky-400/60 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20'
+                    : 'border-sky-300 bg-sky-100 text-sky-700 hover:bg-sky-200'
+                }`}
+              >
+                {isDarkTheme ? 'Light mode' : 'Dark mode'}
+              </button>
+              <button
+                type="button"
+                onClick={handleResetPool}
+                className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                  isDarkTheme
+                    ? 'border-rose-400/50 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20'
+                    : 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                }`}
+              >
+                Reset pool
+              </button>
+            </div>
           </div>
         </header>
 
         <section className="stats-grid">
-          <div className="rounded-2xl border border-emerald-500/35 bg-emerald-500/10 p-4 sm:p-5">
+          <div
+            className={`rounded-2xl border p-4 sm:p-5 ${
+              isDarkTheme
+                ? 'border-emerald-500/35 bg-emerald-500/10'
+                : 'border-emerald-300 bg-emerald-50'
+            }`}
+          >
             <p className="text-xs uppercase tracking-[0.2em] text-emerald-200">Budget</p>
-            <p className="mt-3 text-2xl font-bold text-white sm:text-3xl">{formatMoney(budget)}</p>
+            <p className={`mt-3 text-2xl font-bold sm:text-3xl ${isDarkTheme ? 'text-white' : 'text-emerald-700'}`}>
+              {formatMoney(budget)}
+            </p>
           </div>
-          <div className="rounded-2xl border border-violet-500/35 bg-violet-500/10 p-4 sm:p-5">
+          <div
+            className={`rounded-2xl border p-4 sm:p-5 ${
+              isDarkTheme
+                ? 'border-violet-500/35 bg-violet-500/10'
+                : 'border-violet-300 bg-violet-50'
+            }`}
+          >
             <p className="text-xs uppercase tracking-[0.2em] text-violet-200">Share</p>
-            <p className="mt-3 text-2xl font-bold text-white sm:text-3xl">{formatMoney(share)}</p>
+            <p className={`mt-3 text-2xl font-bold sm:text-3xl ${isDarkTheme ? 'text-white' : 'text-violet-700'}`}>
+              {formatMoney(share)}
+            </p>
           </div>
-          <div className="rounded-2xl border border-amber-500/35 bg-amber-500/10 p-4 sm:p-5">
+          <div
+            className={`rounded-2xl border p-4 sm:p-5 ${
+              isDarkTheme
+                ? 'border-amber-500/35 bg-amber-500/10'
+                : 'border-amber-300 bg-amber-50'
+            }`}
+          >
             <p className="text-xs uppercase tracking-[0.2em] text-amber-200">Collected</p>
-            <p className="mt-3 text-2xl font-bold text-white sm:text-3xl">{formatMoney(totalCollected)}</p>
+            <p className={`mt-3 text-2xl font-bold sm:text-3xl ${isDarkTheme ? 'text-white' : 'text-amber-700'}`}>
+              {formatMoney(totalCollected)}
+            </p>
           </div>
-          <div className="rounded-2xl border border-rose-500/35 bg-rose-500/10 p-4 sm:p-5">
+          <div
+            className={`rounded-2xl border p-4 sm:p-5 ${
+              isDarkTheme
+                ? 'border-rose-500/35 bg-rose-500/10'
+                : 'border-rose-300 bg-rose-50'
+            }`}
+          >
             <p className="text-xs uppercase tracking-[0.2em] text-rose-200">Still needed</p>
-            <p className="mt-3 text-2xl font-bold text-white sm:text-3xl">{formatMoney(stillNeeded)}</p>
+            <p className={`mt-3 text-2xl font-bold sm:text-3xl ${isDarkTheme ? 'text-white' : 'text-rose-700'}`}>
+              {formatMoney(stillNeeded)}
+            </p>
           </div>
         </section>
 
-        <div className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-200 shadow-lg shadow-slate-950/30">
+        <div
+          className={`rounded-2xl border p-4 text-sm shadow-lg ${
+            isDarkTheme
+              ? 'border-slate-700 bg-slate-900/70 text-slate-200 shadow-slate-950/30'
+              : 'border-slate-200 bg-white text-slate-700 shadow-slate-200/70'
+          }`}
+        >
           <span className={stillNeeded === 0 ? 'text-emerald-300' : 'text-amber-300'}>
             {statusText}
           </span>
         </div>
 
         <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-3xl border border-slate-700 bg-slate-900/80 p-4 shadow-lg shadow-slate-950/30 sm:p-5">
+          <div
+            className={`rounded-3xl border p-4 shadow-lg sm:p-5 ${
+              isDarkTheme
+                ? 'border-slate-700 bg-slate-900/80 shadow-slate-950/30'
+                : 'border-slate-200 bg-white shadow-slate-200/80'
+            }`}
+          >
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold text-white">Pool setup</h2>
+              <h2 className={`text-xl font-semibold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                Pool setup
+              </h2>
               <button
                 type="button"
                 onClick={handleAddMember}
-                className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-100 transition hover:bg-sky-500/20"
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                  isDarkTheme
+                    ? 'border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20'
+                    : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100'
+                }`}
               >
                 + Add member
               </button>
             </div>
 
-            <label className="mb-4 block text-sm text-slate-300">
-              Budget (₹)
+            <label className={`mb-4 block text-sm ${isDarkTheme ? 'text-slate-300' : 'text-slate-600'}`}>
+              <span className="flex items-center justify-between gap-3">
+                <span>Budget (₹)</span>
+                <span className="text-xs text-slate-400">Updates live</span>
+              </span>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={budget}
-                onChange={(event) => setBudget(Number(event.target.value || 0))}
-                className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-white outline-none transition focus:border-sky-400"
+                onChange={(event) => setBudget(Math.max(0, Number(event.target.value || 0)))}
+                className={`mt-2 w-full rounded-xl border px-3 py-2.5 outline-none transition ${
+                  isDarkTheme
+                    ? 'border-slate-600 bg-slate-950 text-white focus:border-sky-400'
+                    : 'border-slate-300 bg-slate-50 text-slate-900 focus:border-sky-500'
+                }`}
               />
             </label>
 
+            <p className="mb-4 text-xs text-slate-400">
+              Add a member and enter their payment to update totals, balances, and settlements live.
+            </p>
+
             <div className="space-y-3">
-              {members.map((member, index) => (
-                <div
-                  key={member.id}
-                  className="grid gap-3 rounded-2xl border border-slate-700 bg-slate-950/60 p-3 sm:grid-cols-[1.2fr_0.8fr_auto]"
-                >
-                  <label className="text-sm text-slate-300">
-                    Name
-                    <input
-                      type="text"
-                      value={member.name}
-                      onChange={(event) =>
-                        handleMemberChange(member.id, 'name', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white outline-none transition focus:border-sky-400"
-                      placeholder={`Member ${index + 1}`}
-                    />
-                  </label>
-
-                  <label className="text-sm text-slate-300">
-                    Paid
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={member.paid}
-                      onChange={(event) =>
-                        handleMemberChange(member.id, 'paid', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 text-white outline-none transition focus:border-sky-400"
-                    />
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMember(member.id)}
-                    className="self-end rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-100 transition hover:bg-rose-500/20"
+              {members.length ? (
+                members.map((member, index) => (
+                  <div
+                    key={member.id}
+                    className={`grid gap-3 rounded-2xl border p-3 sm:grid-cols-[1.2fr_0.8fr_auto] ${
+                      isDarkTheme
+                        ? 'border-slate-700 bg-slate-950/60'
+                        : 'border-slate-200 bg-slate-50'
+                    }`}
                   >
-                    Remove
-                  </button>
+                    <label className={`text-sm ${isDarkTheme ? 'text-slate-300' : 'text-slate-600'}`}>
+                      Name
+                      <input
+                        type="text"
+                        value={member.name}
+                        autoFocus={member.id === newMemberId}
+                        onFocus={() => setNewMemberId(null)}
+                        onChange={(event) =>
+                          handleMemberChange(member.id, 'name', event.target.value)
+                        }
+                        className={`mt-2 w-full rounded-xl border px-3 py-2 outline-none transition ${
+                          isDarkTheme
+                            ? 'border-slate-600 bg-slate-900 text-white focus:border-sky-400'
+                            : 'border-slate-300 bg-white text-slate-900 focus:border-sky-500'
+                        }`}
+                        placeholder={`Member ${index + 1}`}
+                      />
+                    </label>
+
+                    <label className={`text-sm ${isDarkTheme ? 'text-slate-300' : 'text-slate-600'}`}>
+                      Paid
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={member.paid}
+                        onChange={(event) =>
+                          handleMemberChange(member.id, 'paid', event.target.value)
+                        }
+                        className={`mt-2 w-full rounded-xl border px-3 py-2 outline-none transition ${
+                          isDarkTheme
+                            ? 'border-slate-600 bg-slate-900 text-white focus:border-sky-400'
+                            : 'border-slate-300 bg-white text-slate-900 focus:border-sky-500'
+                        }`}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMember(member.id)}
+                      className={`self-end rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                        isDarkTheme
+                          ? 'border-rose-500/40 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20'
+                          : 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                      }`}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div
+                  className={`rounded-2xl border border-dashed p-6 text-center text-sm ${
+                    isDarkTheme
+                      ? 'border-slate-600 bg-slate-950/40 text-slate-400'
+                      : 'border-slate-300 bg-slate-50 text-slate-500'
+                  }`}
+                >
+                  No members yet. Click “+ Add member” to start the pool.
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-700 bg-slate-900/80 p-4 shadow-lg shadow-slate-950/30 sm:p-5">
-            <h2 className="mb-4 text-xl font-semibold text-white">Messy import</h2>
+          <div
+            className={`rounded-3xl border p-4 shadow-lg sm:p-5 ${
+              isDarkTheme
+                ? 'border-slate-700 bg-slate-900/80 shadow-slate-950/30'
+                : 'border-slate-200 bg-white shadow-slate-200/80'
+            }`}
+          >
+            <h2 className={`mb-4 text-xl font-semibold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+              Messy import
+            </h2>
 
-            <label className="block text-sm text-slate-300">
+            <label className={`block text-sm ${isDarkTheme ? 'text-slate-300' : 'text-slate-600'}`}>
               Past contributions
               <textarea
                 rows="10"
                 value={importText}
                 onChange={(event) => setImportText(event.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-white outline-none transition focus:border-sky-400"
+                className={`mt-2 w-full rounded-xl border px-3 py-2.5 outline-none transition ${
+                  isDarkTheme
+                    ? 'border-slate-600 bg-slate-950 text-white focus:border-sky-400'
+                    : 'border-slate-300 bg-slate-50 text-slate-900 focus:border-sky-500'
+                }`}
                 placeholder="Asha: 900
 Ravi, 750
 bad row"
@@ -433,7 +589,11 @@ bad row"
             <button
               type="button"
               onClick={handleImport}
-              className="mt-4 w-full rounded-xl bg-sky-500 px-4 py-2.5 font-semibold text-white transition hover:bg-sky-400"
+              className={`mt-4 w-full rounded-xl px-4 py-2.5 font-semibold transition ${
+                isDarkTheme
+                  ? 'bg-sky-500 text-white hover:bg-sky-400'
+                  : 'bg-sky-600 text-white hover:bg-sky-500'
+              }`}
             >
               Clean + import
             </button>
@@ -441,55 +601,126 @@ bad row"
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-          <div className="rounded-3xl border border-slate-700 bg-slate-900/80 p-4 shadow-lg shadow-slate-950/30 sm:p-5">
-            <h2 className="mb-4 text-xl font-semibold text-white">Import report</h2>
+          <div
+            className={`rounded-3xl border p-4 shadow-lg sm:p-5 ${
+              isDarkTheme
+                ? 'border-slate-700 bg-slate-900/80 shadow-slate-950/30'
+                : 'border-slate-200 bg-white shadow-slate-200/80'
+            }`}
+          >
+            <h2 className={`mb-4 text-xl font-semibold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+              Import report
+            </h2>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-slate-700 bg-slate-950 p-3">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Imported</p>
-                <p className="mt-2 text-2xl font-bold text-white">{summary.imported}</p>
+              <div
+                className={`rounded-2xl border p-3 ${
+                  isDarkTheme ? 'border-slate-700 bg-slate-950' : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Rows read</p>
+                <p className={`mt-2 text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                  {summary.imported}
+                </p>
               </div>
-              <div className="rounded-2xl border border-slate-700 bg-slate-950 p-3">
+              <div
+                className={`rounded-2xl border p-3 ${
+                  isDarkTheme ? 'border-slate-700 bg-slate-950' : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Accepted</p>
+                <p className={`mt-2 text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                  {summary.accepted}
+                </p>
+              </div>
+              <div
+                className={`rounded-2xl border p-3 ${
+                  isDarkTheme ? 'border-slate-700 bg-slate-950' : 'border-slate-200 bg-slate-50'
+                }`}
+              >
                 <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Unique</p>
-                <p className="mt-2 text-2xl font-bold text-white">{summary.uniqueCount}</p>
+                <p className={`mt-2 text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                  {summary.uniqueCount}
+                </p>
               </div>
-              <div className="rounded-2xl border border-slate-700 bg-slate-950 p-3">
+              <div
+                className={`rounded-2xl border p-3 ${
+                  isDarkTheme ? 'border-slate-700 bg-slate-950' : 'border-slate-200 bg-slate-50'
+                }`}
+              >
                 <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Merged</p>
-                <p className="mt-2 text-2xl font-bold text-white">{summary.mergedCount}</p>
+                <p className={`mt-2 text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                  {summary.mergedCount}
+                </p>
               </div>
-              <div className="rounded-2xl border border-slate-700 bg-slate-950 p-3">
+              <div
+                className={`rounded-2xl border p-3 ${
+                  isDarkTheme ? 'border-slate-700 bg-slate-950' : 'border-slate-200 bg-slate-50'
+                }`}
+              >
                 <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Rejected</p>
-                <p className="mt-2 text-2xl font-bold text-white">{summary.rejected.length}</p>
+                <p className={`mt-2 text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                  {summary.rejected.length}
+                </p>
               </div>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-4">
-              <p className="text-sm font-medium text-slate-200">Cleaned entries</p>
-              <ul className="mt-3 space-y-2 text-sm text-slate-300">
+            <div
+              className={`mt-5 rounded-2xl border p-4 ${
+                isDarkTheme ? 'border-slate-700 bg-slate-950' : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <p className={`text-sm font-medium ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>
+                Cleaned entries
+              </p>
+              <ul className={`mt-3 space-y-2 text-sm ${isDarkTheme ? 'text-slate-300' : 'text-slate-600'}`}>
                 {summary.cleanedEntries.length ? (
                   summary.cleanedEntries.map((entry) => (
                     <li
                       key={entry.normalized}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2"
+                      className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+                        isDarkTheme
+                          ? 'border-slate-800 bg-slate-900'
+                          : 'border-slate-200 bg-white'
+                      }`}
                     >
-                      <span>{entry.name}</span>
+                      <span>
+                        {entry.name}
+                        {entry.duplicateRows > 0 && (
+                          <span className="ml-2 text-xs text-slate-400">
+                            +{entry.duplicateRows} merged
+                          </span>
+                        )}
+                      </span>
                       <span className="font-semibold text-emerald-300">{formatMoney(entry.amount)}</span>
                     </li>
                   ))
                 ) : (
-                  <li className="text-slate-400">No valid contributions yet.</li>
+                  <li className={isDarkTheme ? 'text-slate-400' : 'text-slate-500'}>
+                    No valid contributions yet.
+                  </li>
                 )}
               </ul>
             </div>
 
             {summary.rejected.length > 0 && (
-              <div className="mt-5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4">
+              <div
+                className={`mt-5 rounded-2xl border p-4 ${
+                  isDarkTheme
+                    ? 'border-rose-500/30 bg-rose-500/10'
+                    : 'border-rose-200 bg-rose-50'
+                }`}
+              >
                 <p className="text-sm font-medium text-rose-100">Rejected rows</p>
                 <ul className="mt-3 space-y-2 text-sm text-rose-200">
                   {summary.rejected.map((item, index) => (
                     <li
                       key={`${item.row}-${index}`}
-                      className="rounded-lg border border-rose-400/30 bg-slate-950/60 px-3 py-2"
+                      className={`rounded-lg border px-3 py-2 ${
+                        isDarkTheme
+                          ? 'border-rose-400/30 bg-slate-950/60'
+                          : 'border-rose-200 bg-white'
+                      }`}
                     >
                       “{item.row}” — {item.reason}
                     </li>
@@ -499,13 +730,21 @@ bad row"
             )}
           </div>
 
-          <div className="rounded-3xl border border-slate-700 bg-slate-900/80 p-4 shadow-lg shadow-slate-950/30 sm:p-5">
-            <h2 className="mb-4 text-xl font-semibold text-white">Balances & settlements</h2>
+          <div
+            className={`rounded-3xl border p-4 shadow-lg sm:p-5 ${
+              isDarkTheme
+                ? 'border-slate-700 bg-slate-900/80 shadow-slate-950/30'
+                : 'border-slate-200 bg-white shadow-slate-200/80'
+            }`}
+          >
+            <h2 className={`mb-4 text-xl font-semibold ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+              Balances & settlements
+            </h2>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm text-slate-200">
+              <table className={`min-w-full text-left text-sm ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>
                 <thead>
-                  <tr className="border-b border-slate-700 text-slate-400">
+                  <tr className={`border-b ${isDarkTheme ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
                     <th className="pb-3 pr-4 font-medium">Person</th>
                     <th className="pb-3 pr-4 font-medium">Paid</th>
                     <th className="pb-3 pr-4 font-medium">Share</th>
@@ -514,8 +753,10 @@ bad row"
                 </thead>
                 <tbody>
                   {balances.map((person) => (
-                    <tr key={person.id} className="border-b border-slate-800">
-                      <td className="py-3 pr-4 font-medium text-white">{person.name || 'Unnamed'}</td>
+                    <tr key={person.id} className={`border-b ${isDarkTheme ? 'border-slate-800' : 'border-slate-200'}`}>
+                      <td className={`py-3 pr-4 font-medium ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                        {person.name || 'Unnamed'}
+                      </td>
                       <td className="py-3 pr-4">{formatMoney(person.paid)}</td>
                       <td className="py-3 pr-4">{formatMoney(person.share)}</td>
                       <td
@@ -535,14 +776,24 @@ bad row"
               </table>
             </div>
 
-            <div className="mt-6 rounded-2xl border border-slate-700 bg-slate-950 p-4">
-              <p className="text-sm font-medium text-slate-200">Final settlement list</p>
+            <div
+              className={`mt-6 rounded-2xl border p-4 ${
+                isDarkTheme ? 'border-slate-700 bg-slate-950' : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <p className={`text-sm font-medium ${isDarkTheme ? 'text-slate-200' : 'text-slate-700'}`}>
+                Final settlement list
+              </p>
               {settlements.length ? (
-                <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                <ul className={`mt-3 space-y-2 text-sm ${isDarkTheme ? 'text-slate-300' : 'text-slate-600'}`}>
                   {settlements.map((transfer, index) => (
                     <li
                       key={`${transfer.from}-${transfer.to}-${index}`}
-                      className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2"
+                      className={`rounded-lg border px-3 py-2 ${
+                        isDarkTheme
+                          ? 'border-slate-800 bg-slate-900'
+                          : 'border-slate-200 bg-white'
+                      }`}
                     >
                       {transfer.from} pays {transfer.to} {formatMoney(transfer.amount)}
                     </li>
